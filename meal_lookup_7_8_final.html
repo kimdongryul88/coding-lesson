@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>7~8월 급식 조회 (영양정보 편집 지원)</title>
+  <style>
+    :root { --ink:#111827; --muted:#6b7280; --blue:#3b82f6; --blue-d:#2563eb; --red:#ef4444; }
+    body { font-family: system-ui, -apple-system, 'Segoe UI', Roboto, 'Noto Sans KR', sans-serif; margin: 24px; color: var(--ink); }
+    h1 { font-size: 1.5rem; margin-bottom: 12px; }
+    .card { border: 1px solid #ddd; border-radius: 12px; padding: 16px; max-width: 960px; box-shadow: 0 2px 6px rgba(0,0,0,0.06); margin-bottom: 16px; }
+    label { font-weight: 600; }
+    input[type="date"], input[type="number"] { padding: 8px; border-radius: 8px; border: 1px solid #ccc; width: 100%; max-width: 220px; }
+    button { padding: 9px 14px; border: 0; border-radius: 8px; background: var(--blue); color: white; font-weight: 700; cursor: pointer; }
+    button:hover { background: var(--blue-d); }
+    button.secondary { background: #eef2ff; color: #3730a3; border: 1px solid #c7d2fe; }
+    button.danger { background: var(--red); }
+    .result { margin-top: 16px; }
+    .menu-item { margin-left: 16px; }
+    .muted { color: var(--muted); }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; background: #eef2ff; color: #3730a3; font-size: 0.85rem; }
+    .origin-list li { margin-left: 16px; }
+    footer { margin-top: 24px; font-size: .9rem; color: var(--muted); }
+    .hint { font-size: .9rem; color: var(--muted); }
+    details > summary { cursor: pointer; margin-top: 12px; }
+    .grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+    .grid label { font-weight: 500; }
+    .import-area { width: 100%; min-height: 110px; padding: 8px; border: 1px solid #ddd; border-radius: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .pill { display:inline-block; padding:2px 8px; border:1px solid #e5e7eb; border-radius:999px; margin-right:4px; font-size:.85rem; }
+    .toolbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top: 8px; }
+    .sr-only { position:absolute; left:-10000px; width:1px; height:1px; overflow:hidden; }
+    #toast { min-height: 1.2em; margin-top: 8px; }
+    @media (max-width: 760px){
+      .grid { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <h1>7~8월 학교 급식 조회</h1>
+  <div class="card">
+    <div>
+      <label for="dateInput">날짜 선택</label><br/>
+      <input id="dateInput" type="date" min="" max=""/>
+      <button id="searchBtn">조회</button>
+      <span class="hint">올해 7~8월 내에서 조회됩니다. 월/일만 매칭하여 표시합니다.</span>
+      <div id="toast" class="hint" aria-live="polite"></div>
+    </div>
+    <div id="result" class="result" aria-live="polite"></div>
+  </div>
+
+  <details class="card">
+    <summary><strong>영양정보 편집·보정</strong> (칼로리/탄수화물/단백질/지방 입력 및 저장)</summary>
+    <p class="hint">
+      PDF에서 텍스트 추출이 어려운 경우를 대비해 날짜별 영양정보를 직접 보정할 수 있습니다.
+      입력 내용은 <strong>브라우저에만</strong> 저장됩니다(로컬 저장소).
+    </p>
+    <div class="grid" role="group" aria-labelledby="nutri-legend">
+      <span id="nutri-legend" class="sr-only">영양정보 입력</span>
+      <div>
+        <label for="kcalInput">칼로리(kcal)</label><br/>
+        <input id="kcalInput" type="number" step="0.1" inputmode="decimal"/>
+      </div>
+      <div>
+        <label for="carbInput">탄수화물(g)</label><br/>
+        <input id="carbInput" type="number" step="0.1" inputmode="decimal"/>
+      </div>
+      <div>
+        <label for="proteinInput">단백질(g)</label><br/>
+        <input id="proteinInput" type="number" step="0.1" inputmode="decimal"/>
+      </div>
+      <div>
+        <label for="fatInput">지방(g)</label><br/>
+        <input id="fatInput" type="number" step="0.1" inputmode="decimal"/>
+      </div>
+    </div>
+    <div class="toolbar">
+      <button id="saveNutriBtn" type="button">현재 선택 날짜로 저장</button>
+      <button id="clearNutriBtn" class="danger" type="button">현재 선택 날짜 삭제</button>
+      <button id="exportBtn" class="secondary" type="button">CSV 내보내기</button>
+      <label class="input">
+        <input id="importFile" type="file" accept=".csv" hidden />
+        <button class="secondary" type="button" id="importBtn">CSV 불러오기</button>
+      </label>
+    </div>
+    <p class="hint" style="margin-top:10px">
+      예시: 07-08의 값은 데이터에 미리 채워 두었습니다
+      <span class="pill">829.4 kcal</span>
+      <span class="pill">탄수화물 57.8 g</span>
+      <span class="pill">단백질 19.6 g</span>
+      <span class="pill">지방 22.6 g</span>
+    </p>
+    <hr/>
+    <h3>일괄 입력(붙여넣기)</h3>
+    <p class="hint">아래 형식으로 여러 줄을 붙여넣고 적용을 누르면 한 번에 저장됩니다.<br/>
+      <code>MM-DD,kcal,carb,protein,fat</code> &nbsp; 예: <code>07-09,827.2,56.2,14.9,28.9</code>
+    </p>
+    <textarea id="bulkArea" class="import-area" placeholder="07-01,611.8,63.9,16.7,19.4&#10;07-02,688.1,64.6,19.2,16.2"></textarea><br/>
+    <button id="applyBulkBtn" type="button">일괄 적용</button>
+  </details>
+
+  <footer>
+    데이터 출처: 급식 영양표시 엑셀(7~8월) 및 안내문. 영양정보는 제공 시 우선 표시되며, 미표기 시 직접 보정할 수 있습니다.
+  </footer>
+
+  <script>
+    // ---------- 샘플 데이터 ----------
+    const DATA = {"06-30": {"menu": ["아비꼬하이스덮밥(일)**(1.2.5.6.12.16.18)", "닭꼬치(1.2.5.6.15.18)", "배추김치(일)**(9)", "콘크림스프팝콘(2.5.6.15.16)", "피크닉(일)**(2.13)"], "origin": ["국내산(한우)", "/국내산", "국내산"], "kcal": null}, "07-01": {"menu": ["스팸밥버거(1.2.5.6.9.10.13.15.16.18)", "우동장국(1.2.5.6.7.9.18)", "회오리감자(일)***(1.2.5.6)", "파인애플", "카프리썬(13)"], "origin": ["/국내산", "국내산"], "kcal": null}, "07-02": {"menu": [], "origin": ["원산지: 파일 상단 안내 참조"], "kcal": null}, "07-03": {"menu": ["차조밥**", "단호박꽃게탕(일)**(5.6.8)", "크래미숙주나물무침(1.5.6.8)", "치킨까스&소스(1.2.5.6.13.15.18)", "깍두기(일)**(9)", "파인애플"], "origin": ["/국내산", "국내산"], "kcal": null}, "07-04": {"menu": ["찹쌀밥(일)**", "쇠고기미역국(5.6.16)", "돼지갈비김치찜(완)***(5.6.9.10.13.18)", "1떡잡채(5.6.13.16)", "오이김치(완)**(9)", "피스타치오아하트바이트트(1.2.5)"], "origin": ["국내산(한우)", "국내산", "/국내산"], "kcal": null}, "07-05": {"menu": [], "origin": ["원산지: 파일 상단 안내 참조"], "kcal": null}, "07-06": {"menu": [], "origin": ["원산지: 파일 상단 안내 참조"], "kcal": null}, "07-07": {"menu": ["발아현미밥(일)**", "수제비짬뽕국(5.6.9.13.17.18)", "안동찜닭(2.5.6.13.15)", "시금치무침(일)**(5.6)", "배추김치(일)**(9)"], "origin": ["국내산", "/국내산", "국내산/국내산"], "kcal": null}, "07-08": {"menu": ["찹쌀밥(일)**", "참치김치찌개(일)**(5.6.9.18)", "파채무침(5.6.13)", "쌈장(5.6)", "캠핑구이(고)(2.5.6.10.13.15.16.18)", "깻잎김치(완)**(9)", "스모어쿠키(1.2.5.6)"], "origin": ["국내산", "/국내산", "국내산/국내산"], "kcal": null}, "07-09": {"menu": ["삼각주먹밥(1.2.5.6.18)", "갈비만두**(1.2.5.6.10.13.16.18)", "숯불고기비빔국수(1.2.5.6.10.12.13.15.16.18)", "1백김치(9)", "아이스망고"], "origin": ["/국내산", "국내산"], "kcal": null}, "07-10": {"menu": ["기장밥(일)**", "황태해장국(1.5.6)", "비엔나소시지메추리알조림(일)**(1.2.5.6.10.12.13.15.16.18)", "미니새우까스(1.2.5.6.9.13.18)", "우유크리스피롤(1.2.5.6.14)", "배추김치(일)**(9)"], "origin": ["/국내산", "국내산", "국내산/국내산"], "kcal": null}, "07-11": {"menu": ["김밥볶음밥**(1.2.5.6.8.10.15.16)", "어묵국(1.5.6.18)", "단무지(일)**(13)", "자장떡볶이(1.2.5.6.10.13.15.16.18)", "왕오징어튀김(일)**(1.2.5.6.17)", "얼려먹는요구르트(2)"], "origin": ["/국내산", "국내산"], "kcal": null}, "07-12": {"menu": [], "origin": ["원산지: 파일 상단 안내 참조"], "kcal": null}, "07-13": {"menu": [], "origin": ["원산지: 파일 상단 안내 참조"], "kcal": null}, "07-14": {"menu": ["문어솥밥(5.6.9.12.13.17.18)", "애호박고추장찌개***(5.6)", "순살양념치킨(완)**(1.2.4.6.12.15.18)", "배추김치(일)**(9)", "청포도"], "origin": ["/국내산", "국내산", "국내산/국내산"], "kcal": null}, "07-15": {"menu": ["찹쌀밥(일)**", "순대국.(2.5.6.10.13.16)", "오이부추무침(완)**(13)", "돈육육전(1.5.6.10.13.15.18)", "1석박지(9)", "짜먹는 설빙 샤베트(팥빙수)(1.2.5.6)"], "origin": ["국내산/국내산", "국내산"], "kcal": null}, "07-16": {"menu": ["두부된장국(일)**(5.6)", "추억의 도시락(일) **(김치,후라이,햄)(1.2.5.6.9.10.13.15.16.18)", "1나박김치(일)**(9)", "생크림카스텔라(1.2.5.6)", "수제미숫가루(일)**(2.5.13)"], "origin": ["/국내산", "국내산", "국내산/국내산"], "kcal": null}, "07-17": {"menu": ["밥까스(1.2.5.6.12.15.18)", "닭칼국수(완!~)**(5.6.13.15)", "새우만두(1.5.6.9.10.15.16.17.18)", "1석박지(9)", "1수박"], "origin": ["국내산/국내산"], "kcal": null}, "07-18": {"menu": [], "origin": ["원산지: 파일 상단 안내 참조"], "kcal": null}, "07-19": {"menu": [], "origin": ["원산지: 파일 상단 안내 참조"], "kcal": null}, "07-20": {"menu": [], "origin": ["원산지: 파일 상단 안내 참조"], "kcal": null}, "08-11": {"menu": [], "origin": ["원산지: 파일 상단 안내 참조"], "kcal": null}, "08-12": {"menu": ["기장밥(일)**", "돈육김치찌개(5.9.10)", "진미채볶음(5.6.13.17)", "깍두기(일)**(9)", "언양식파채불고기(1.2.5.6.10.12.13.16.18)"], "origin": ["국내산/국내산", "국내산"], "kcal": null}, "08-13": {"menu": ["단호박카레라이스(일)**(2.5.6.10.12.13.16.18)", "치킨치즈카츠(1.2.5.6.15.18)", "버터찹쌀믹스부각(1.2.5.6)", "깍두기(일)**(9)", "과일화채(2.11)"], "origin": ["국내산", "/국내산"], "kcal": null}, "08-14": {"menu": ["찹쌀밥(일)**", "맑은미역국**(5.6)", "매운갈비찜(5.6.10.13.18)", "탕평채(1.5.6.13.16)", "배추김치(일)**(9)", "끌레도르쿠앤크아이스크림(일)**(1.2.5.6)"], "origin": ["국내산(한우)", "국내산", "/국내산"], "kcal": null}, "08-15": {"menu": [], "origin": ["원산지: 파일 상단 안내 참조"], "kcal": null}, "08-16": {"menu": [], "origin": ["원산지: 파일 상단 안내 참조"], "kcal": null}, "08-17": {"menu": [], "origin": ["원산지: 파일 상단 안내 참조"], "kcal": null}, "08-18": {"menu": ["현미밥(일)**", "쇠고기무국(일)**(5.6.16)", "마파두부(5.6.10.12.13.18)", "안심돈강정(수)**(1.2.5.6.10.12.13.18)", "배추김치(일)**(9)"], "origin": ["국내산(한우)", "국내산/국내산", "국내산", "/국내산"], "kcal": null}, "08-19": {"menu": ["기장밥(일)**", "쇠고기조랭이떡국**(1.5.6.13.16)", "올방개묵무침(일)**", "닭볶음탕(5.6.13.15.18)", "배추김치(일)**(9)"], "origin": ["국내산(한우)", "국내산", "국내산/국내산"], "kcal": null}, "08-20": {"menu": ["비프퀘사디아(1.2.5.6.10.12.16.18)", "멕시칸타코라이스(1.2.5.6.10.12.13.16.18)", "피클&할라피뇨(13)", "모히또(13)", "스위트콘나쵸(1.2.5.6)"], "origin": ["/호주산", "국내산/국내산", "국내산"], "kcal": null}, "08-21": {"menu": ["완두콩밥(일)**", "미소된장국**(5.6)", "양배추샐러드(1.5)", "대파크림치즈돈까스(1.2.5.6.10.12.18)", "깍두기(일)**(9)", "돈까스소스(일)**(1.2.5.6.12.13.16.18)", "모닝빵&딸기쨈(완)***(1.2.5.6.13)"], "origin": ["/국내산", "국내산"], "kcal": null}, "08-22": {"menu": ["돼지국밥&소면(일)**(2.5.6.9.10.18)", "사과오징어초무침(완)**(5.6.13.17)", "김치전(1.5.6)", "1석박지(9)", "딸바짜먹는샤베트(1.2.5)"], "origin": ["국내산/국내산", "국내산"], "kcal": null}, "08-23": {"menu": [], "origin": ["원산지: 파일 상단 안내 참조"], "kcal": null}, "08-24": {"menu": [], "origin": ["원산지: 파일 상단 안내 참조"], "kcal": null}, "08-25": {"menu": ["곤드레나물밥/양념장(5.6.13.16)", "고추장찌개(5.6)", "매운바베큐닭봉오븐구이(일)(1.2.6.12.13.15.18)", "1배추김치(9)", "샤인머스켓"], "origin": ["국내산(한우)", "국내산", "/국내산"], "kcal": null}, "08-26": {"menu": ["발아현미밥(일)**", "꽃게된장찌개(5.6.8)", "몽글계란찜(1)", "제육볶음(5.6.10.13)", "배추김치(일)**(9)", "파인애플"], "origin": ["국내산", "/국내산"], "kcal": null}, "08-27": {"menu": ["계란함박스테이크(1.2.5.6.10.12.15.16.18)", "김치볶음밥(1.2.5.6.9.10.13.15.16.18)", "유부장국(5.6)", "우유생크림도넛(일)**(1.2.5.6)", "1나박김치(일)**(9)", "흰우유**(2)"], "origin": ["/국내산", "국내산"], "kcal": null}, "08-28": {"menu": ["귀리밥(일)**", "낙지수제비국(5.6)", "춘천닭갈비(일)**(2.5.6.12.13.15.16.18)", "감자전(5.6)", "배추김치(일)**(9)"], "origin": ["국내산", "/국내산"], "kcal": null}, "08-29": {"menu": ["미니청양참치마요밥(일)(1.2.5.6.13.18)", "우동장국(1.2.5.6.7.9.18)", "단무지(일)**(13)", "차돌박이떡볶이(1.2.5.6.10.13.15.16.18)", "소시지핫도그(1.2.5.6.10.12.15.18)", "요구르트(2)"], "origin": ["국내산(한우)", "/국내산", "국내산"], "kcal": null}, "08-30": {"menu": [], "origin": ["원산지: 파일 상단 안내 참조"], "kcal": null}, "08-31": {"menu": [], "origin": ["원산지: 파일 상단 안내 참조"], "kcal": null}};
+
+    const YEAR = new Date().getFullYear();
+    const NUTRITION_DEFAULT = {"07-08": {"kcal": 829.4, "carb": 57.8, "protein": 19.6, "fat": 22.6}};
+    const LS_KEY = `meal-nutrition-7-8-${YEAR}`;
+
+    // ---------- 유틸 ----------
+    function fmtDateKey(d) {
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      return `${mm}-${dd}`;
+    }
+    function toast(msg){
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      clearTimeout(toast._t);
+      toast._t = setTimeout(()=>{ t.textContent=''; }, 2500);
+    }
+    function cleanText(s){
+      return String(s)
+        .replace(/^\//,'')                 // 선행 슬래시 제거
+        .replace(/\(일\)|\(완\)|\*\*\*?/g,'') // 표기 제거
+        .replace(/\s+/g,' ')
+        .trim();
+    }
+    function getNutritionMap() {
+      const raw = localStorage.getItem(LS_KEY);
+      if (raw) {
+        try { return JSON.parse(raw); } catch (_) {}
+      }
+      // seed once
+      localStorage.setItem(LS_KEY, JSON.stringify(NUTRITION_DEFAULT));
+      return { ...NUTRITION_DEFAULT };
+    }
+    function setNutritionMap(map) {
+      localStorage.setItem(LS_KEY, JSON.stringify(map));
+    }
+    function inRange(dt){
+      const y = dt.getFullYear();
+      return (dt >= new Date(y,6,1) && dt <= new Date(y,7,31));
+    }
+
+    // ---------- 렌더 ----------
+    let currentKey = null;
+    function render(key) {
+      currentKey = key;
+      const box = document.getElementById('result');
+      const entry = DATA[key];
+      const nutri = getNutritionMap()[key] || null;
+
+      if (!entry) {
+        box.innerHTML = `<p class="muted">선택한 날짜에 대한 급식 정보가 없습니다. 7~8월 범위인지 확인해 주세요.</p>`;
+        fillEditor(nutri);
+        return;
+      }
+
+      const menuList = (entry.menu || []).map(m => `<li class="menu-item">${cleanText(m)}</li>`).join('');
+      const originList = (entry.origin || []).map(o => `<li>${cleanText(o)}</li>`).join('');
+
+      let nutriHtml = '<p class="muted">영양정보가 없습니다.</p>';
+      if (nutri) {
+        nutriHtml = `
+          <ul>
+            <li>총 칼로리: ${nutri.kcal} kcal</li>
+            <li>탄수화물: ${nutri.carb} g</li>
+            <li>단백질: ${nutri.protein} g</li>
+            <li>지방: ${nutri.fat} g</li>
+          </ul>
+        `;
+      }
+
+      box.innerHTML = `
+        <div>
+          <div class="badge">조회일: ${key}</div>
+          <h2>메뉴</h2>
+          <ul>${menuList || '<li class="muted">메뉴 정보 없음</li>'}</ul>
+          <h2>영양정보</h2>
+          ${nutriHtml}
+          <h2>원산지</h2>
+          <ul class="origin-list">${originList || '<li class="muted">원산지 정보 없음</li>'}</ul>
+        </div>
+      `;
+
+      fillEditor(nutri);
+    }
+
+    function fillEditor(nutri) {
+      document.getElementById('kcalInput').value = nutri?.kcal ?? '';
+      document.getElementById('carbInput').value = nutri?.carb ?? '';
+      document.getElementById('proteinInput').value = nutri?.protein ?? '';
+      document.getElementById('fatInput').value = nutri?.fat ?? '';
+    }
+
+    // ---------- 초기화: 달력 범위 ----------
+    (function initDateBounds(){
+      const y = new Date().getFullYear();
+      const el = document.getElementById('dateInput');
+      el.min = `${y}-07-01`;
+      el.max = `${y}-08-31`;
+    })();
+
+    // ---------- 이벤트 ----------
+    document.getElementById('searchBtn').addEventListener('click', () => {
+      const v = document.getElementById('dateInput').value;
+      if (!v) { toast('날짜를 선택해 주세요.'); return; }
+      const dt = new Date(v);
+      if (!inRange(dt)) { toast('올해 7~8월 범위만 조회됩니다.'); return; }
+      render(fmtDateKey(dt));
+    });
+
+    document.getElementById('saveNutriBtn').addEventListener('click', () => {
+      if (!currentKey) { toast('먼저 날짜를 조회하세요.'); return; }
+      const kcal = parseFloat(document.getElementById('kcalInput').value);
+      const carb = parseFloat(document.getElementById('carbInput').value);
+      const protein = parseFloat(document.getElementById('proteinInput').value);
+      const fat = parseFloat(document.getElementById('fatInput').value);
+
+      if ([kcal,carb,protein,fat].some(v => Number.isNaN(v))) {
+        toast('숫자 형식으로 모두 입력해 주세요.');
+        return;
+      }
+
+      const map = getNutritionMap();
+      map[currentKey] = { kcal, carb, protein, fat };
+      setNutritionMap(map);
+      render(currentKey);
+      toast('저장 완료');
+    });
+
+    document.getElementById('clearNutriBtn').addEventListener('click', () => {
+      if (!currentKey) return;
+      const map = getNutritionMap();
+      delete map[currentKey];
+      setNutritionMap(map);
+      render(currentKey);
+      toast('삭제 완료');
+    });
+
+    document.getElementById('applyBulkBtn').addEventListener('click', () => {
+      const text = document.getElementById('bulkArea').value || '';
+      const lines = text.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+      const map = getNutritionMap();
+      let ok = 0, fail = 0, bad = [];
+
+      for (let i=0;i<lines.length;i++){
+        const line = lines[i];
+        const parts = line.split(',').map(s => s.trim());
+        if (parts.length !== 5) { fail++; bad.push({lineNo: i+1, line}); continue; }
+        const [key, kcal, carb, protein, fat] = parts;
+        const nums = [kcal, carb, protein, fat].map(Number);
+        if (nums.some(v => Number.isNaN(v))) { fail++; bad.push({lineNo: i+1, line}); continue; }
+        map[key] = { kcal: nums[0], carb: nums[1], protein: nums[2], fat: nums[3] };
+        ok++;
+      }
+      setNutritionMap(map);
+      if (ok > 0 && currentKey) render(currentKey);
+      toast(`일괄 적용: 성공 ${ok}건, 실패 ${fail}건`);
+      if (bad.length) console.table(bad);
+    });
+
+    // CSV 내보내기/불러오기
+    document.getElementById('exportBtn').addEventListener('click', () => {
+      const map = getNutritionMap();
+      const rows = [['key','kcal','carb','protein','fat']];
+      for (const [k, v] of Object.entries(map)) {
+        rows.push([k, v.kcal, v.carb, v.protein, v.fat]);
+      }
+      const csv = rows.map(r => r.join(',')).join('\n');
+      const blob = new Blob([csv], {type: 'text/csv;charset=utf-8;'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `nutrition-${YEAR}.csv`; a.click();
+      URL.revokeObjectURL(url);
+    });
+    document.getElementById('importBtn').addEventListener('click', () => {
+      document.getElementById('importFile').click();
+    });
+    document.getElementById('importFile').addEventListener('change', async (e) => {
+      const f = e.target.files?.[0]; if(!f) return;
+      const text = await f.text();
+      const lines = text.split(/\r?\n/).filter(Boolean);
+      const map = {};
+      let start = 0;
+      if (/^key,/.test(lines[0])) start = 1;
+      for (let i = start; i < lines.length; i++){
+        const [key, kcal, carb, protein, fat] = lines[i].split(',').map(s=>s.trim());
+        if (!key) continue;
+        const nums = [kcal, carb, protein, fat].map(Number);
+        if (nums.some(v => Number.isNaN(v))) continue;
+        map[key] = {kcal: nums[0], carb: nums[1], protein: nums[2], fat: nums[3]};
+      }
+      setNutritionMap(map);
+      if (currentKey) render(currentKey);
+      toast('CSV 불러오기 완료');
+      e.target.value = '';
+    });
+
+    // ---------- 자동 프리뷰 ----------
+    (function() {
+      const now = new Date();
+      const y = now.getFullYear();
+      const in78 = (now.getMonth()+1 === 7 || now.getMonth()+1 === 8);
+      const first = new Date(y, 6, 1);
+      const el = document.getElementById('dateInput');
+      el.valueAsDate = in78 ? now : first;
+      render(fmtDateKey(el.valueAsDate));
+    })();
+  </script>
+</body>
+</html>
